@@ -36,9 +36,17 @@ Tap **New die**, then pick what goes on the faces:
 - **Words — text**: type your own, or start from a preset (Yes/No, Heads/Tails, Chores, Actions, Directions)
 - **Emoji**: tap from the emoji palette
 
-Every face is editable one by one, faces can be added, removed or shuffled, and each
-die gets a name and a colour. Face text shrinks automatically so long words still fit,
-and face labels flip to dark ink on pale colours so they stay readable.
+Every face is editable one by one, and faces can be added, removed or shuffled.
+
+**Colour and size**
+
+- Ten preset colours plus a 🎨 swatch that opens the device's native colour picker,
+  so a die can be any colour at all
+- A **Face size** slider (50%–180%) scales whatever is on the face — numbers, letters,
+  words, emoji, and the spot patterns too — saved per die
+
+Face text also shrinks automatically so long words still fit, and labels flip to dark
+ink on pale colours so they stay readable at any size.
 
 **Rolling**
 

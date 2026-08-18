@@ -1,5 +1,5 @@
 /* Offline cache — bump CACHE when the shell files change. */
-var CACHE = 'dicelab-v1';
+var CACHE = 'dicelab-v2';
 var ASSETS = [
   './',
   './index.html',

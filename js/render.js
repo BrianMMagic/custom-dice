@@ -61,9 +61,13 @@
       shade(die.color, -18) + ')';
     node.style.color = ink;
 
+    var scale = die.scale || 1;
     var spots = die.faceType === 'pips' ? PIP_MAP[parseInt(face, 10)] : null;
     if (spots) {
       var grid = el('div', 'pips');
+      var span = Math.max(38, Math.min(94, 70 * scale));
+      grid.style.width = span + '%';
+      grid.style.height = span + '%';
       for (var i = 0; i < 9; i++) {
         var dot = el('i', spots.indexOf(i) >= 0 ? '' : 'blank');
         dot.style.background = spots.indexOf(i) >= 0 ? ink : 'transparent';
@@ -72,7 +76,7 @@
       node.appendChild(grid);
     } else {
       var t = el('span', 'face-text', face);
-      t.style.fontSize = textScale(face) + 'em';
+      t.style.fontSize = (textScale(face) * scale) + 'em';
       node.appendChild(t);
     }
     node.setAttribute('role', 'img');

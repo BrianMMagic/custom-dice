@@ -307,6 +307,44 @@ svg{width:24px;height:24px;fill:currentColor}
 .swatches{display:flex;gap:10px;flex-wrap:wrap}
 .swatch{width:38px;height:38px;border-radius:12px;position:relative}
 .swatch[aria-checked="true"]{box-shadow:0 0 0 2.5px var(--bg),0 0 0 5px var(--text)}
+.swatch-custom{
+  position:relative;overflow:hidden;display:grid;place-items:center;
+  background:conic-gradient(#ff5c6c,#ffc93c,#3ddc97,#2fb8ff,#7c5cff,#ff6b9d,#ff5c6c);
+}
+.swatch-custom::after{
+  content:"";position:absolute;inset:9px;border-radius:50%;
+  background:var(--bg);opacity:.86;
+}
+.swatch-custom .pen{position:relative;z-index:1;font-size:15px;line-height:1;pointer-events:none}
+.swatch-custom input{
+  position:absolute;inset:0;width:100%;height:100%;opacity:0;
+  border:0;padding:0;cursor:pointer;
+}
+
+.size-row{display:flex;align-items:center;gap:12px}
+.size-hint{color:var(--muted);font-weight:750;font-size:13px;line-height:1}
+.size-hint-big{font-size:24px}
+.size-val{
+  font-size:13px;font-weight:700;color:var(--accent);
+  font-variant-numeric:tabular-nums;letter-spacing:.01em;
+}
+.slider{
+  flex:1;min-width:0;height:36px;background:transparent;
+  -webkit-appearance:none;appearance:none;
+}
+.slider:focus{outline:none}
+.slider:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:8px}
+.slider::-webkit-slider-runnable-track{height:6px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line)}
+.slider::-moz-range-track{height:6px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line)}
+.slider::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:28px;height:28px;margin-top:-12px;
+  border-radius:50%;background:var(--accent);border:3px solid var(--bg);
+  box-shadow:0 2px 8px rgba(0,0,0,.35);
+}
+.slider::-moz-range-thumb{
+  width:26px;height:26px;border-radius:50%;background:var(--accent);
+  border:3px solid var(--bg);box-shadow:0 2px 8px rgba(0,0,0,.35);
+}
 
 .segmented{display:flex;gap:6px;background:var(--surface-2);padding:5px;border-radius:15px;overflow-x:auto;scrollbar-width:none}
 .segmented::-webkit-scrollbar{display:none}

@@ -208,6 +208,7 @@
     $('btn-delete-die').hidden = !editingExisting;
 
     renderColors();
+    renderSize();
     renderTypeSelector();
     renderBuilders();
     renderFacesEditor();
@@ -239,6 +240,42 @@
       });
       box.appendChild(sw);
     });
+    box.appendChild(customSwatch());
+  }
+
+  /* Opens the device's native colour picker for anything off-palette. */
+  function customSwatch() {
+    var wrap = el('label', 'swatch swatch-custom');
+    var isCustom = M.COLORS.indexOf(draft.color) < 0;
+    wrap.setAttribute('aria-checked', String(isCustom));
+    wrap.title = 'Pick any colour';
+
+    var input = el('input');
+    input.type = 'color';
+    input.value = draft.color;
+    input.setAttribute('aria-label', 'Custom colour');
+    // Live-preview while dragging; commit the full re-render when released.
+    input.addEventListener('input', function () {
+      draft.color = M.normalizeColor(input.value);
+      renderPreview();
+    });
+    input.addEventListener('change', function () {
+      draft.color = M.normalizeColor(input.value);
+      renderColors();
+      renderFacesEditor();
+    });
+    wrap.appendChild(input);
+    wrap.appendChild(el('span', 'pen', '🎨'));
+    return wrap;
+  }
+
+  /* --- face size --- */
+  function renderSize() {
+    var slider = $('editor-size');
+    slider.min = M.SCALE_MIN;
+    slider.max = M.SCALE_MAX;
+    slider.value = draft.scale;
+    $('size-val').textContent = Math.round(draft.scale * 100) + '%';
   }
 
   function renderTypeSelector() {
@@ -440,6 +477,7 @@
       id: editingExisting ? draft.id : undefined,
       name: draft.name,
       color: draft.color,
+      scale: draft.scale,
       faceType: draft.faceType,
       faces: draft.faces,
       createdAt: draft.createdAt
@@ -533,6 +571,16 @@
     document.querySelectorAll('#editor-type button').forEach(function (b) {
       b.addEventListener('click', function () { changeType(b.dataset.type); });
     });
+    $('editor-size').addEventListener('input', function () {
+      draft.scale = M.clampScale(this.value);
+      $('size-val').textContent = Math.round(draft.scale * 100) + '%';
+      renderPreview();
+    });
+    $('editor-size').addEventListener('change', function () {
+      renderFacesEditor();
+      buzz(6);
+    });
+
     $('btn-add-blank-face').addEventListener('click', function () {
       draft.faces.push('');
       renderFacesEditor();

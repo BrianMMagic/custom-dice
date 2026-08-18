@@ -62,11 +62,30 @@
     return out;
   }
 
+  /* Face size multiplier: 0.5x to 1.8x of the auto-fitted size. */
+  var SCALE_MIN = 0.5, SCALE_MAX = 1.8;
+
+  function clampScale(v) {
+    var n = parseFloat(v);
+    if (!isFinite(n)) return 1;
+    return Math.max(SCALE_MIN, Math.min(SCALE_MAX, Math.round(n * 20) / 20));
+  }
+
+  function normalizeColor(c) {
+    var v = String(c || '').trim();
+    if (/^#[0-9a-f]{6}$/i.test(v)) return v.toLowerCase();
+    if (/^#[0-9a-f]{3}$/i.test(v)) {
+      return ('#' + v[1] + v[1] + v[2] + v[2] + v[3] + v[3]).toLowerCase();
+    }
+    return COLORS[0];
+  }
+
   function makeDie(props) {
     return {
       id: props.id || uid(),
       name: props.name || 'New die',
-      color: props.color || COLORS[0],
+      color: normalizeColor(props.color),
+      scale: clampScale(props.scale === undefined ? 1 : props.scale),
       faceType: FACE_TYPES.indexOf(props.faceType) >= 0 ? props.faceType : 'number',
       faces: (props.faces && props.faces.length ? props.faces.slice() : ['1', '2', '3', '4', '5', '6']),
       createdAt: props.createdAt || Date.now()
@@ -88,7 +107,10 @@
 
   function rollDie(die) {
     var i = randomInt(die.faces.length);
-    return { dieId: die.id, name: die.name, color: die.color, faceType: die.faceType, face: die.faces[i], index: i };
+    return {
+      dieId: die.id, name: die.name, color: die.color, scale: die.scale,
+      faceType: die.faceType, face: die.faces[i], index: i
+    };
   }
 
   function faceNumber(face) {
@@ -216,6 +238,10 @@
 
   global.DiceModel = {
     COLORS: COLORS,
+    SCALE_MIN: SCALE_MIN,
+    SCALE_MAX: SCALE_MAX,
+    clampScale: clampScale,
+    normalizeColor: normalizeColor,
     FACE_TYPES: FACE_TYPES,
     EMOJI: EMOJI,
     WORD_PRESETS: WORD_PRESETS,
