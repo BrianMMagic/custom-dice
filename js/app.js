@@ -1,0 +1,667 @@
+/* ============================================================
+   app.js — screens, editor and interactions
+   ============================================================ */
+(function (global) {
+  'use strict';
+
+  var M = global.DiceModel;
+  var R = global.DiceRender;
+  var el = R.el;
+  var $ = function (id) { return document.getElementById(id); };
+
+  var lastResults = [];
+  var draft = null;          // die being edited in the sheet
+  var editingExisting = false;
+
+  /* ============================================================
+     Navigation
+     ============================================================ */
+  var VIEWS = ['roll', 'dice', 'history'];
+
+  function showView(name) {
+    VIEWS.forEach(function (v) {
+      $('view-' + v).hidden = v !== name;
+    });
+    document.querySelectorAll('.tab').forEach(function (tab) {
+      var on = tab.dataset.view === name;
+      tab.classList.toggle('is-active', on);
+      if (on) tab.setAttribute('aria-current', 'page'); else tab.removeAttribute('aria-current');
+    });
+    if (name === 'history') renderHistory();
+    if (name === 'dice') renderLibrary();
+    window.scrollTo({ top: 0 });
+  }
+
+  /* ============================================================
+     Toast
+     ============================================================ */
+  var toastTimer = null;
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, 1800);
+  }
+
+  function buzz(pattern) {
+    if (!M.state().settings.haptics) return;
+    if (navigator.vibrate) { try { navigator.vibrate(pattern); } catch (e) {} }
+  }
+
+  /* ============================================================
+     Tray + rolling
+     ============================================================ */
+  function renderTray() {
+    var s = M.state();
+    var list = $('tray-list');
+    var count = M.totalDiceInTray();
+
+    $('tray-empty').hidden = count > 0;
+    list.hidden = count === 0;
+    $('roll-dock').hidden = count === 0;
+    list.innerHTML = '';
+
+    s.tray.forEach(function (entry) {
+      var die = M.getDie(entry.dieId);
+      if (!die) return;
+      list.appendChild(R.trayItem(die, entry.count, {
+        onCount: function (d, n) {
+          M.setTrayCount(d.id, n);
+          renderTray();
+          buzz(8);
+        }
+      }));
+    });
+
+    $('roll-count').textContent = count ? '· ' + count + (count === 1 ? ' die' : ' dice') : '';
+    $('btn-roll').disabled = count === 0;
+    $('shake-hint').hidden = !(s.settings.shake && count > 0);
+    updateTabBadge(count);
+  }
+
+  function updateTabBadge(count) {
+    var tab = document.querySelector('.tab[data-view="roll"] span');
+    tab.textContent = count ? 'Roll (' + count + ')' : 'Roll';
+  }
+
+  function doRoll() {
+    if (M.totalDiceInTray() === 0) { showView('dice'); return; }
+    lastResults = M.rollTray();
+    renderResults('all');
+    buzz([12, 40, 22]);
+  }
+
+  /* True when a die landed on its own highest number — a "max roll". */
+  var topFaceCache = {};
+  function isTopFace(result) {
+    var die = M.getDie(result.dieId);
+    if (!die || die.faces.length < 2) return false;
+    if (!(die.id in topFaceCache)) {
+      var best = null;
+      die.faces.forEach(function (f) {
+        var n = M.faceNumber(f);
+        if (n !== null && (best === null || n > best)) best = n;
+      });
+      topFaceCache[die.id] = best;
+    }
+    var top = topFaceCache[die.id];
+    return top !== null && M.faceNumber(result.face) === top;
+  }
+
+  /* Tap a landed die to reroll just that one. */
+  function rerollOne(index) {
+    var prev = lastResults[index];
+    var die = M.getDie(prev.dieId);
+    if (!die) return;
+    lastResults[index] = M.rollDie(die);
+    var s = M.state();
+    if (s.history.length) {
+      s.history[0].results = lastResults.slice();
+      s.history[0].total = M.totalOf(lastResults);
+      M.save();
+    }
+    renderResults(index);
+    buzz([10, 30]);
+  }
+
+  /* animateFrom: 'all' animates every tile, a number animates just that one. */
+  function renderResults(animateFrom) {
+    if (animateFrom === undefined) animateFrom = null;
+    var box = $('results');
+    topFaceCache = {};
+    box.innerHTML = '';
+    if (!lastResults.length) { $('total-pill').hidden = true; return; }
+
+    lastResults.forEach(function (r, i) {
+      var animate = animateFrom === 'all' || animateFrom === i;
+      box.appendChild(R.resultTile(r, i, isTopFace(r), rerollOne, animate));
+    });
+
+    var total = M.totalOf(lastResults);
+    var pill = $('total-pill');
+    if (total !== null && M.state().settings.total) {
+      pill.innerHTML = '';
+      pill.appendChild(document.createTextNode('Total '));
+      var b = el('b', null, String(total));
+      pill.appendChild(b);
+      pill.hidden = false;
+    } else {
+      pill.hidden = true;
+    }
+  }
+
+  /* ============================================================
+     Library
+     ============================================================ */
+  function renderLibrary() {
+    var grid = $('dice-grid');
+    grid.innerHTML = '';
+    var dice = M.state().dice;
+    if (!dice.length) {
+      grid.appendChild(el('p', 'empty-note', 'No dice yet. Tap “New die” to make your first one.'));
+      return;
+    }
+    dice.forEach(function (die) {
+      grid.appendChild(R.dieCard(die, M.trayCount(die.id), {
+        onAdd: function (d) {
+          M.setTrayCount(d.id, M.trayCount(d.id) + 1);
+          renderLibrary();
+          renderTray();
+          buzz(10);
+          toast(d.name + ' added to tray');
+        },
+        onEdit: function (d) { openEditor(d); }
+      }));
+    });
+  }
+
+  /* ============================================================
+     History
+     ============================================================ */
+  function renderHistory() {
+    var box = $('history-list');
+    box.innerHTML = '';
+    var h = M.state().history;
+    if (!h.length) {
+      box.appendChild(el('p', 'empty-note', 'No rolls yet. Your results will show up here.'));
+      return;
+    }
+    h.forEach(function (entry) { box.appendChild(R.historyItem(entry)); });
+  }
+
+  /* ============================================================
+     Editor
+     ============================================================ */
+  function openEditor(die) {
+    editingExisting = !!die;
+    draft = die
+      ? M.makeDie(JSON.parse(JSON.stringify(die)))
+      : M.makeDie({ name: '', color: M.COLORS[M.randomInt(M.COLORS.length)], faceType: 'number', faces: M.numberRange(1, 6) });
+
+    draft.rangeFrom = 1;
+    draft.rangeTo = draft.faces.length || 6;
+
+    $('editor-title').textContent = editingExisting ? 'Edit die' : 'New die';
+    $('editor-name').value = draft.name;
+    $('editor-name').placeholder = editingExisting ? 'Die name' : 'e.g. Chore picker';
+    $('btn-delete-die').hidden = !editingExisting;
+
+    renderColors();
+    renderTypeSelector();
+    renderBuilders();
+    renderFacesEditor();
+    $('editor').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeEditor() {
+    $('editor').hidden = true;
+    document.body.style.overflow = '';
+    draft = null;
+  }
+
+  function renderColors() {
+    var box = $('editor-colors');
+    box.innerHTML = '';
+    M.COLORS.forEach(function (c) {
+      var sw = el('button', 'swatch');
+      sw.type = 'button';
+      sw.style.background = c;
+      sw.setAttribute('role', 'radio');
+      sw.setAttribute('aria-label', 'Colour ' + c);
+      sw.setAttribute('aria-checked', String(c === draft.color));
+      sw.addEventListener('click', function () {
+        draft.color = c;
+        renderColors();
+        renderPreview();
+        renderFacesEditor();
+      });
+      box.appendChild(sw);
+    });
+  }
+
+  function renderTypeSelector() {
+    document.querySelectorAll('#editor-type button').forEach(function (b) {
+      b.type = 'button';
+      b.setAttribute('aria-checked', String(b.dataset.type === draft.faceType));
+    });
+  }
+
+  /* Convert existing faces so they suit the newly chosen type. */
+  function changeType(type) {
+    var count = Math.max(2, draft.faces.length);
+    draft.faceType = type;
+
+    if (type === 'number' && !draft.faces.every(isNumeric)) {
+      draft.faces = M.numberRange(1, count);
+    } else if (type === 'pips') {
+      var pipCount = Math.min(9, count);
+      if (!draft.faces.every(isPip)) draft.faces = M.numberRange(1, pipCount);
+    } else if (type === 'letter' && !draft.faces.every(isLetter)) {
+      draft.faces = M.letterRange(Math.min(26, count), 0);
+    } else if (type === 'emoji' && !draft.faces.every(isEmoji)) {
+      draft.faces = [];
+    }
+    draft.rangeFrom = 1;
+    draft.rangeTo = draft.faces.length || 6;
+
+    renderTypeSelector();
+    renderBuilders();
+    renderFacesEditor();
+  }
+
+  function isNumeric(f) { return M.faceNumber(f) !== null; }
+  function isPip(f) { var n = M.faceNumber(f); return n !== null && n >= 1 && n <= 9 && n % 1 === 0; }
+  function isLetter(f) { return /^[A-Za-z]$/.test(String(f).trim()); }
+  function isEmoji(f) { return /\p{Extended_Pictographic}/u.test(String(f)); }
+
+  function renderBuilders() {
+    var t = draft.faceType;
+    var useRange = (t === 'number' || t === 'pips' || t === 'letter');
+    $('builder-range').hidden = !useRange;
+    $('builder-add').hidden = (t !== 'word');
+    $('builder-emoji').hidden = (t !== 'emoji');
+
+    if (useRange) renderRangeBuilder();
+    if (t === 'word') renderWordBuilder();
+    if (t === 'emoji') renderEmojiBuilder();
+  }
+
+  function rangeLimits() {
+    if (draft.faceType === 'pips') return { min: 1, max: 9 };
+    if (draft.faceType === 'letter') return { min: 1, max: 26 };
+    return { min: -99, max: 999 };
+  }
+
+  function rangeDisplay(v) {
+    return draft.faceType === 'letter' ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.max(0, Math.min(25, v - 1))] : String(v);
+  }
+
+  function applyRange() {
+    var from = draft.rangeFrom, to = draft.rangeTo;
+    if (draft.faceType === 'letter') {
+      var count = Math.abs(to - from) + 1;
+      draft.faces = M.letterRange(count, Math.min(from, to) - 1);
+    } else {
+      draft.faces = M.numberRange(from, to);
+    }
+    renderFacesEditor();
+  }
+
+  function renderRangeBuilder() {
+    $('range-from').textContent = rangeDisplay(draft.rangeFrom);
+    $('range-to').textContent = rangeDisplay(draft.rangeTo);
+
+    var presets = $('range-presets');
+    presets.innerHTML = '';
+    var options;
+    if (draft.faceType === 'pips') {
+      options = [{ label: '1–6 spots', from: 1, to: 6 }, { label: '1–9 spots', from: 1, to: 9 }];
+    } else if (draft.faceType === 'letter') {
+      options = [{ label: 'A–F', from: 1, to: 6 }, { label: 'A–M', from: 1, to: 13 }, { label: 'A–Z', from: 1, to: 26 }];
+    } else {
+      options = M.RANGE_PRESETS.map(function (n) { return { label: 'd' + n, from: 1, to: n }; });
+    }
+    options.forEach(function (o) {
+      var chip = el('button', 'chip', o.label);
+      chip.type = 'button';
+      chip.addEventListener('click', function () {
+        draft.rangeFrom = o.from; draft.rangeTo = o.to;
+        renderRangeBuilder();
+        applyRange();
+      });
+      presets.appendChild(chip);
+    });
+  }
+
+  function renderWordBuilder() {
+    $('builder-add-label').textContent = 'Add a word';
+    $('add-face-input').placeholder = 'Type a word…';
+    var box = $('word-presets');
+    box.innerHTML = '';
+    M.WORD_PRESETS.forEach(function (p) {
+      var chip = el('button', 'chip', p.label);
+      chip.type = 'button';
+      chip.addEventListener('click', function () {
+        draft.faces = p.words.slice();
+        renderFacesEditor();
+        toast('Filled with ' + p.label);
+      });
+      box.appendChild(chip);
+    });
+  }
+
+  function renderEmojiBuilder() {
+    var grid = $('emoji-grid');
+    if (grid.childElementCount) return;   // build once
+    M.EMOJI.forEach(function (e) {
+      var b = el('button', null, e);
+      b.type = 'button';
+      b.setAttribute('aria-label', 'Add ' + e);
+      b.addEventListener('click', function () {
+        draft.faces.push(e);
+        renderFacesEditor();
+        buzz(6);
+      });
+      grid.appendChild(b);
+    });
+  }
+
+  function renderPreview() {
+    var box = $('editor-preview');
+    box.innerHTML = '';
+    var face = draft.faces.length ? draft.faces[0] : '?';
+    var preview = R.faceEl(draft, face);
+    preview.classList.add('die-preview');
+    box.replaceWith(preview);
+    preview.id = 'editor-preview';
+    $('editor-facecount').textContent = draft.faces.length + ' ' +
+      (draft.faces.length === 1 ? 'face' : 'faces') + ' · ' + R.TYPE_LABEL[draft.faceType];
+  }
+
+  function renderFacesEditor() {
+    var box = $('faces-editor');
+    box.innerHTML = '';
+    draft.faces.forEach(function (face, i) {
+      var row = el('div', 'face-row');
+      row.appendChild(el('span', 'face-num', String(i + 1)));
+
+      var mini = R.faceEl(draft, face || '?');
+      mini.classList.add('die-chip', 'face-mini');
+      mini.style.width = '34px'; mini.style.height = '34px'; mini.style.fontSize = '14px';
+      row.appendChild(mini);
+
+      var input = el('input');
+      input.type = 'text';
+      input.value = face;
+      input.maxLength = 18;
+      input.setAttribute('aria-label', 'Face ' + (i + 1));
+      input.addEventListener('input', function () {
+        draft.faces[i] = input.value;
+        var fresh = R.faceEl(draft, input.value || '?');
+        fresh.classList.add('die-chip', 'face-mini');
+        fresh.style.width = '34px'; fresh.style.height = '34px'; fresh.style.fontSize = '14px';
+        mini.replaceWith(fresh);
+        mini = fresh;
+        if (i === 0) renderPreview();
+      });
+      row.appendChild(input);
+
+      var del = el('button', 'face-del', '✕');
+      del.type = 'button';
+      del.setAttribute('aria-label', 'Remove face ' + (i + 1));
+      del.addEventListener('click', function () {
+        draft.faces.splice(i, 1);
+        renderFacesEditor();
+        buzz(8);
+      });
+      row.appendChild(del);
+      box.appendChild(row);
+    });
+    renderPreview();
+  }
+
+  function saveDraft() {
+    draft.faces = draft.faces
+      .map(function (f) { return String(f).trim(); })
+      .filter(function (f) { return f.length > 0; });
+
+    if (draft.faces.length < 2) {
+      toast('A die needs at least 2 faces');
+      return;
+    }
+    draft.name = ($('editor-name').value || '').trim() ||
+      (draft.faceType === 'pips' || draft.faceType === 'number'
+        ? 'D' + draft.faces.length
+        : R.TYPE_LABEL[draft.faceType].replace(/^./, function (c) { return c.toUpperCase(); }) + ' die');
+
+    var die = M.makeDie({
+      id: editingExisting ? draft.id : undefined,
+      name: draft.name,
+      color: draft.color,
+      faceType: draft.faceType,
+      faces: draft.faces,
+      createdAt: draft.createdAt
+    });
+    M.upsertDie(die);
+    closeEditor();
+    renderLibrary();
+    renderTray();
+    toast(editingExisting ? 'Die saved' : '“' + die.name + '” created');
+    if (!editingExisting) showView('dice');
+  }
+
+  /* ============================================================
+     Settings
+     ============================================================ */
+  function openSettings() {
+    var s = M.state().settings;
+    $('opt-shake').checked = !!s.shake;
+    $('opt-haptics').checked = !!s.haptics;
+    $('opt-total').checked = !!s.total;
+    $('settings').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeSettings() {
+    $('settings').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  /* ============================================================
+     Shake to roll
+     ============================================================ */
+  var shakeBound = false, lastShake = 0, lastMag = 0;
+
+  function onMotion(e) {
+    var a = e.accelerationIncludingGravity || e.acceleration;
+    if (!a) return;
+    var mag = Math.sqrt((a.x || 0) * (a.x || 0) + (a.y || 0) * (a.y || 0) + (a.z || 0) * (a.z || 0));
+    var delta = Math.abs(mag - lastMag);
+    lastMag = mag;
+    var now = Date.now();
+    if (delta > 14 && now - lastShake > 900) {
+      lastShake = now;
+      if (!$('view-roll').hidden && $('editor').hidden && $('settings').hidden) doRoll();
+    }
+  }
+
+  function enableShake() {
+    var DME = global.DeviceMotionEvent;
+    if (!DME) { toast('This device has no motion sensor'); return Promise.resolve(false); }
+    var ask = (typeof DME.requestPermission === 'function')
+      ? DME.requestPermission()
+      : Promise.resolve('granted');
+    return ask.then(function (res) {
+      if (res !== 'granted') { toast('Motion access was blocked'); return false; }
+      if (!shakeBound) { window.addEventListener('devicemotion', onMotion); shakeBound = true; }
+      return true;
+    }).catch(function () { toast('Motion access was blocked'); return false; });
+  }
+
+  function disableShake() {
+    if (shakeBound) { window.removeEventListener('devicemotion', onMotion); shakeBound = false; }
+  }
+
+  /* ============================================================
+     Wiring
+     ============================================================ */
+  function bind() {
+    document.querySelectorAll('.tab').forEach(function (tab) {
+      tab.addEventListener('click', function () { showView(tab.dataset.view); });
+    });
+    document.querySelectorAll('[data-goto]').forEach(function (b) {
+      b.addEventListener('click', function () { showView(b.dataset.goto); });
+    });
+
+    $('btn-roll').addEventListener('click', doRoll);
+    $('btn-clear-tray').addEventListener('click', function () {
+      M.clearTray();
+      lastResults = [];
+      renderTray();
+      renderResults();
+      renderLibrary();
+    });
+
+    $('btn-new-die').addEventListener('click', function () { openEditor(null); });
+
+    /* editor */
+    $('editor-cancel').addEventListener('click', closeEditor);
+    $('editor-save').addEventListener('click', saveDraft);
+    $('editor-name').addEventListener('input', function () { draft.name = this.value; });
+    document.querySelectorAll('#editor-type button').forEach(function (b) {
+      b.addEventListener('click', function () { changeType(b.dataset.type); });
+    });
+    $('btn-add-blank-face').addEventListener('click', function () {
+      draft.faces.push('');
+      renderFacesEditor();
+      var inputs = $('faces-editor').querySelectorAll('input');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+    $('btn-shuffle-faces').addEventListener('click', function () {
+      draft.faces = M.shuffle(draft.faces);
+      renderFacesEditor();
+      buzz(8);
+    });
+    $('btn-delete-die').addEventListener('click', function () {
+      if (!confirm('Delete “' + draft.name + '”? This cannot be undone.')) return;
+      M.deleteDie(draft.id);
+      closeEditor();
+      renderLibrary();
+      renderTray();
+      toast('Die deleted');
+    });
+
+    document.querySelectorAll('#builder-range .step-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var which = btn.parentElement.dataset.for;
+        var lim = rangeLimits();
+        var step = parseInt(btn.dataset.step, 10);
+        var key = which === 'from' ? 'rangeFrom' : 'rangeTo';
+        draft[key] = Math.max(lim.min, Math.min(lim.max, draft[key] + step));
+        if (Math.abs(draft.rangeTo - draft.rangeFrom) + 1 > 100) draft[key] -= step;
+        renderRangeBuilder();
+        applyRange();
+      });
+    });
+
+    $('add-face-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var input = $('add-face-input');
+      var val = input.value.trim();
+      if (!val) return;
+      draft.faces.push(val);
+      input.value = '';
+      renderFacesEditor();
+      buzz(6);
+    });
+
+    /* settings */
+    $('btn-settings').addEventListener('click', openSettings);
+    $('settings-close').addEventListener('click', closeSettings);
+    $('opt-shake').addEventListener('change', function () {
+      var on = this.checked;
+      var s = M.state().settings;
+      if (on) {
+        var self = this;
+        enableShake().then(function (ok) {
+          s.shake = ok;
+          self.checked = ok;
+          M.save();
+          renderTray();
+        });
+      } else {
+        s.shake = false;
+        disableShake();
+        M.save();
+        renderTray();
+      }
+    });
+    $('opt-haptics').addEventListener('change', function () {
+      M.state().settings.haptics = this.checked; M.save(); buzz(12);
+    });
+    $('opt-total').addEventListener('change', function () {
+      M.state().settings.total = this.checked; M.save(); renderResults();
+    });
+    $('btn-clear-history').addEventListener('click', function () {
+      M.state().history = [];
+      M.save();
+      renderHistory();
+      toast('History cleared');
+    });
+    $('btn-reset').addEventListener('click', function () {
+      if (!confirm('Reset the app? Your custom dice will be removed and the starter dice restored.')) return;
+      var s = M.state();
+      s.dice = M.starterDice();
+      s.tray = [];
+      s.history = [];
+      M.save();
+      lastResults = [];
+      closeSettings();
+      renderTray();
+      renderResults();
+      renderLibrary();
+      renderHistory();
+      showView('dice');
+      toast('Starter dice restored');
+    });
+
+    /* tap the dimmed backdrop to dismiss a sheet */
+    ['editor', 'settings'].forEach(function (id) {
+      $(id).addEventListener('click', function (e) {
+        if (e.target === this) { id === 'editor' ? closeEditor() : closeSettings(); }
+      });
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        if (!$('editor').hidden) closeEditor();
+        else if (!$('settings').hidden) closeSettings();
+      }
+      if (e.code === 'Space' && !$('view-roll').hidden && $('editor').hidden && $('settings').hidden &&
+          document.activeElement === document.body) {
+        e.preventDefault();
+        doRoll();
+      }
+    });
+  }
+
+  /* ============================================================
+     Boot
+     ============================================================ */
+  function init() {
+    M.load();
+    bind();
+    renderTray();
+    renderLibrary();
+    showView(M.totalDiceInTray() ? 'roll' : 'dice');
+    if (M.state().settings.shake) enableShake();
+
+    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+      navigator.serviceWorker.register('sw.js').catch(function () { /* offline cache is optional */ });
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})(window);

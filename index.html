@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5" />
+<title>Dice Lab — Custom Dice</title>
+<meta name="description" content="Design your own dice with numbers, letters, spots, words or emoji, then roll them." />
+<meta name="theme-color" content="#12121a" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ TOP BAR ============ -->
+  <header class="topbar">
+    <h1 class="brand"><span class="brand-dot" aria-hidden="true"></span>Dice Lab</h1>
+    <button class="icon-btn" id="btn-settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.4-2.3 1a7.6 7.6 0 0 0-1.8-1L14.9 3H9.1l-.4 2.6a7.6 7.6 0 0 0-1.8 1l-2.3-1-2 3.4L4.6 11a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.4 2.3-1c.55.42 1.16.76 1.8 1l.4 2.6h5.8l.4-2.6c.64-.24 1.25-.58 1.8-1l2.3 1 2-3.4-2-1.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    </button>
+  </header>
+
+  <main class="views">
+
+    <!-- ============ ROLL VIEW ============ -->
+    <section class="view view-roll is-active" id="view-roll" aria-label="Roll">
+      <div class="tray" id="tray">
+        <div class="tray-empty" id="tray-empty">
+          <div class="tray-empty-art" aria-hidden="true">🎲</div>
+          <p class="tray-empty-title">Your tray is empty</p>
+          <p class="tray-empty-sub">Pick dice from your collection to start rolling.</p>
+          <button class="btn btn-primary" data-goto="dice">Choose dice</button>
+        </div>
+        <div class="tray-list" id="tray-list" hidden></div>
+      </div>
+
+      <div class="results" id="results" aria-live="polite"></div>
+
+      <div class="roll-dock" id="roll-dock" hidden>
+        <div class="total-pill" id="total-pill" hidden></div>
+        <div class="roll-actions">
+          <button class="btn btn-ghost" id="btn-clear-tray">Clear</button>
+          <button class="btn btn-roll" id="btn-roll">
+            <span class="roll-label">Roll</span>
+            <span class="roll-count" id="roll-count"></span>
+          </button>
+        </div>
+        <p class="shake-hint" id="shake-hint" hidden>Shake your phone to roll</p>
+      </div>
+    </section>
+
+    <!-- ============ DICE VIEW ============ -->
+    <section class="view view-dice" id="view-dice" aria-label="My dice" hidden>
+      <div class="view-head">
+        <h2>My dice</h2>
+        <p class="view-sub">Tap a die to add it to the tray. Tap <b>Edit</b> to change its faces.</p>
+      </div>
+      <div class="dice-grid" id="dice-grid"></div>
+      <button class="fab" id="btn-new-die" aria-label="Create a new die">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+        <span>New die</span>
+      </button>
+    </section>
+
+    <!-- ============ HISTORY VIEW ============ -->
+    <section class="view view-history" id="view-history" aria-label="History" hidden>
+      <div class="view-head">
+        <h2>History</h2>
+        <p class="view-sub">Your last 50 rolls.</p>
+      </div>
+      <div class="history-list" id="history-list"></div>
+    </section>
+
+  </main>
+
+  <!-- ============ BOTTOM NAV ============ -->
+  <nav class="tabbar" aria-label="Main">
+    <button class="tab is-active" data-view="roll" aria-current="page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="8.5" cy="8.5" r="1.6"/><circle cx="15.5" cy="15.5" r="1.6"/><circle cx="12" cy="12" r="1.6"/></svg>
+      <span>Roll</span>
+    </button>
+    <button class="tab" data-view="dice">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6 20.5 7v10L12 21.4 3.5 17V7L12 2.6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3.8 7.2 12 11.6l8.2-4.4M12 11.6V21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <span>Dice</span>
+    </button>
+    <button class="tab" data-view="history">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5.3l3.4 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>History</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ============ EDITOR SHEET ============ -->
+<div class="sheet" id="editor" hidden role="dialog" aria-modal="true" aria-labelledby="editor-title">
+  <div class="sheet-panel">
+    <header class="sheet-head">
+      <button class="sheet-cancel" id="editor-cancel">Cancel</button>
+      <h2 id="editor-title">New die</h2>
+      <button class="sheet-save" id="editor-save">Save</button>
+    </header>
+
+    <div class="sheet-body">
+      <div class="preview-row">
+        <div class="die-preview" id="editor-preview"></div>
+        <div class="preview-meta">
+          <input class="name-input" id="editor-name" type="text" placeholder="Die name" maxlength="24" aria-label="Die name" />
+          <div class="face-count" id="editor-facecount">6 faces</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Colour</label>
+        <div class="swatches" id="editor-colors" role="radiogroup" aria-label="Colour"></div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">What's on the faces?</label>
+        <div class="segmented" id="editor-type" role="radiogroup" aria-label="Face type">
+          <button role="radio" data-type="number">123</button>
+          <button role="radio" data-type="letter">ABC</button>
+          <button role="radio" data-type="pips">Spots</button>
+          <button role="radio" data-type="word">Words</button>
+          <button role="radio" data-type="emoji">Emoji</button>
+        </div>
+      </div>
+
+      <!-- builders -->
+      <div class="field builder" id="builder-range" hidden>
+        <label class="field-label">Quick fill</label>
+        <div class="range-row">
+          <div class="stepper" data-for="from">
+            <button class="step-btn" data-step="-1" aria-label="Lower start">−</button>
+            <div class="step-val"><span id="range-from">1</span><small>from</small></div>
+            <button class="step-btn" data-step="1" aria-label="Raise start">+</button>
+          </div>
+          <div class="stepper" data-for="to">
+            <button class="step-btn" data-step="-1" aria-label="Lower end">−</button>
+            <div class="step-val"><span id="range-to">6</span><small>to</small></div>
+            <button class="step-btn" data-step="1" aria-label="Raise end">+</button>
+          </div>
+        </div>
+        <div class="chip-row" id="range-presets"></div>
+      </div>
+
+      <div class="field builder" id="builder-add" hidden>
+        <label class="field-label" id="builder-add-label">Add a face</label>
+        <form class="add-row" id="add-face-form">
+          <input id="add-face-input" type="text" placeholder="Type a word…" maxlength="18" autocomplete="off" aria-label="New face" />
+          <button class="btn btn-small" type="submit">Add</button>
+        </form>
+        <div class="chip-row" id="word-presets"></div>
+      </div>
+
+      <div class="field builder" id="builder-emoji" hidden>
+        <label class="field-label">Tap emoji to add</label>
+        <div class="emoji-grid" id="emoji-grid"></div>
+      </div>
+
+      <div class="field">
+        <div class="field-label-row">
+          <label class="field-label">Faces</label>
+          <button class="link-btn" id="btn-shuffle-faces">Shuffle</button>
+        </div>
+        <div class="faces-editor" id="faces-editor"></div>
+        <button class="add-face-btn" id="btn-add-blank-face">+ Add face</button>
+      </div>
+
+      <button class="btn btn-danger" id="btn-delete-die" hidden>Delete this die</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SETTINGS SHEET ============ -->
+<div class="sheet" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  <div class="sheet-panel sheet-panel-short">
+    <header class="sheet-head">
+      <button class="sheet-cancel" id="settings-close">Close</button>
+      <h2 id="settings-title">Settings</h2>
+      <span class="sheet-save" aria-hidden="true"></span>
+    </header>
+    <div class="sheet-body">
+      <label class="toggle-row">
+        <div><b>Shake to roll</b><small>Give your phone a shake to roll the tray.</small></div>
+        <input type="checkbox" id="opt-shake" />
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <label class="toggle-row">
+        <div><b>Vibration</b><small>A short buzz when the dice land.</small></div>
+        <input type="checkbox" id="opt-haptics" />
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <label class="toggle-row">
+        <div><b>Show total</b><small>Add up faces that are numbers.</small></div>
+        <input type="checkbox" id="opt-total" />
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <button class="btn btn-ghost" id="btn-clear-history">Clear roll history</button>
+      <button class="btn btn-danger" id="btn-reset">Reset app &amp; restore starter dice</button>
+      <p class="fineprint">Everything is stored on this device only.</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="js/model.js"></script>
+<script src="js/render.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
