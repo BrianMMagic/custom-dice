@@ -9,9 +9,14 @@
   var el = R.el;
   var $ = function (id) { return document.getElementById(id); };
 
+  var APP_VERSION = '1.3.0';
+
   var lastResults = [];
   var draft = null;          // die being edited in the sheet
   var editingExisting = false;
+  var trayExpanded = true;   // collapse the tray once dice are on the stage
+  var rollTimers = [];       // pending timeouts for the rolling animation
+  var isRolling = false;
 
   /* ============================================================
      Navigation
@@ -55,29 +60,53 @@
   function renderTray() {
     var s = M.state();
     var list = $('tray-list');
+    var summary = $('tray-summary');
     var count = M.totalDiceInTray();
+    var collapsed = count > 0 && !trayExpanded;
 
     $('tray-empty').hidden = count > 0;
-    list.hidden = count === 0;
+    list.hidden = count === 0 || collapsed;
+    summary.hidden = !collapsed;
     $('roll-dock').hidden = count === 0;
     list.innerHTML = '';
 
-    s.tray.forEach(function (entry) {
-      var die = M.getDie(entry.dieId);
-      if (!die) return;
-      list.appendChild(R.trayItem(die, entry.count, {
-        onCount: function (d, n) {
-          M.setTrayCount(d.id, n);
-          renderTray();
-          buzz(8);
-        }
-      }));
-    });
+    if (collapsed) {
+      renderTraySummary();
+    } else {
+      s.tray.forEach(function (entry) {
+        var die = M.getDie(entry.dieId);
+        if (!die) return;
+        list.appendChild(R.trayItem(die, entry.count, {
+          onCount: function (d, n) {
+            M.setTrayCount(d.id, n);
+            renderTray();
+            buzz(8);
+          }
+        }));
+      });
+    }
 
     $('roll-count').textContent = count ? '· ' + count + (count === 1 ? ' die' : ' dice') : '';
     $('btn-roll').disabled = count === 0;
     $('shake-hint').hidden = !(s.settings.shake && count > 0);
     updateTabBadge(count);
+  }
+
+  /* One-line stand-in for the tray so the dice own the screen. */
+  function renderTraySummary() {
+    var faces = $('tray-summary-faces');
+    var text = $('tray-summary-text');
+    faces.innerHTML = '';
+
+    var names = [];
+    M.state().tray.slice(0, 4).forEach(function (entry) {
+      var die = M.getDie(entry.dieId);
+      if (!die) return;
+      faces.appendChild(R.faceEl(die, R.showcaseFace(die)));
+      names.push(die.name + (entry.count > 1 ? ' ×' + entry.count : ''));
+    });
+    if (M.state().tray.length > 4) names.push('+' + (M.state().tray.length - 4) + ' more');
+    text.textContent = names.join(', ');
   }
 
   function updateTabBadge(count) {
@@ -87,9 +116,85 @@
 
   function doRoll() {
     if (M.totalDiceInTray() === 0) { showView('dice'); return; }
+    clearRollTimers();
     lastResults = M.rollTray();
-    renderResults('all');
-    buzz([12, 40, 22]);
+    trayExpanded = false;          // give the stage the room
+    renderTray();
+    animateRoll();
+  }
+
+  function clearRollTimers() {
+    rollTimers.forEach(clearTimeout);
+    rollTimers = [];
+    isRolling = false;
+  }
+
+  function reducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  /* Tiles tumble through random faces, then land one by one. */
+  function animateRoll() {
+    var tiles = renderResults('rolling');
+    if (!tiles.length) return;
+
+    if (reducedMotion()) {
+      tiles.forEach(function (t, i) { t.settle(lastResults[i]); });
+      showTotal();
+      buzz([12, 40, 22]);
+      return;
+    }
+
+    isRolling = true;
+    $('total-pill').hidden = true;
+    $('btn-roll').disabled = true;
+    buzz(14);
+
+    var spin = setInterval(function () {
+      tiles.forEach(function (t) { if (!t.landed) t.showRandomFace(); });
+    }, 70);
+    rollTimers.push(spin);
+
+    tiles.forEach(function (tile, i) {
+      var delay = 520 + Math.min(i, 8) * 90;
+      rollTimers.push(setTimeout(function () {
+        tile.settle(lastResults[i]);
+        buzz(10);
+      }, delay));
+    });
+
+    var last = 520 + Math.min(tiles.length - 1, 8) * 90;
+    rollTimers.push(setTimeout(function () {
+      clearInterval(spin);
+      isRolling = false;
+      $('btn-roll').disabled = M.totalDiceInTray() === 0;
+      showTotal();
+      buzz([0, 26]);
+    }, last + 60));
+  }
+
+  function showTotal() {
+    var total = M.totalOf(lastResults);
+    var pill = $('total-pill');
+    if (total !== null && M.state().settings.total) {
+      pill.innerHTML = '';
+      pill.appendChild(document.createTextNode('Total '));
+      pill.appendChild(el('b', null, String(total)));
+      pill.hidden = false;
+    } else {
+      pill.hidden = true;
+    }
+  }
+
+  /* Dice grow when there are only a few of them. */
+  function tileSize(count) {
+    if (count <= 1) return 'min(64vw, 250px)';
+    if (count === 2) return 'min(43vw, 175px)';
+    if (count <= 4) return 'min(38vw, 145px)';
+    if (count <= 6) return 'min(29vw, 120px)';
+    if (count <= 9) return 'min(25vw, 102px)';
+    if (count <= 16) return 'min(21vw, 88px)';
+    return 'min(18vw, 74px)';
   }
 
   /* True when a die landed on its own highest number — a "max roll". */
@@ -111,44 +216,97 @@
 
   /* Tap a landed die to reroll just that one. */
   function rerollOne(index) {
+    if (isRolling) return;
     var prev = lastResults[index];
     var die = M.getDie(prev.dieId);
     if (!die) return;
-    lastResults[index] = M.rollDie(die);
+
+    var result = M.rollDie(die);
+    lastResults[index] = result;
     var s = M.state();
     if (s.history.length) {
       s.history[0].results = lastResults.slice();
       s.history[0].total = M.totalOf(lastResults);
       M.save();
     }
-    renderResults(index);
-    buzz([10, 30]);
+
+    var tile = $('results').children[index];
+    if (!tile) { renderResults('settled'); showTotal(); return; }
+    var handle = makeTileHandle(tile, result, index);
+
+    if (reducedMotion()) {
+      handle.settle(result);
+      showTotal();
+      buzz([10, 30]);
+      return;
+    }
+
+    $('total-pill').hidden = true;
+    tile.classList.add('is-rolling');
+    buzz(10);
+    var spin = setInterval(function () { handle.showRandomFace(); }, 70);
+    rollTimers.push(spin);
+    rollTimers.push(setTimeout(function () {
+      clearInterval(spin);
+      handle.settle(result);
+      showTotal();
+      buzz([0, 22]);
+    }, 420));
   }
 
-  /* animateFrom: 'all' animates every tile, a number animates just that one. */
-  function renderResults(animateFrom) {
-    if (animateFrom === undefined) animateFrom = null;
+  /* mode 'rolling' builds tiles mid-tumble; 'settled' shows final faces.
+     Returns tile handles the animation drives. */
+  function renderResults(mode) {
     var box = $('results');
     topFaceCache = {};
     box.innerHTML = '';
-    if (!lastResults.length) { $('total-pill').hidden = true; return; }
+    if (!lastResults.length) { $('total-pill').hidden = true; return []; }
 
-    lastResults.forEach(function (r, i) {
-      var animate = animateFrom === 'all' || animateFrom === i;
-      box.appendChild(R.resultTile(r, i, isTopFace(r), rerollOne, animate));
+    box.style.setProperty('--tile', tileSize(lastResults.length));
+
+    return lastResults.map(function (r, i) {
+      var tile = R.resultTile(r, i, false, rerollOne, mode === 'settled');
+      box.appendChild(tile);
+      var handle = makeTileHandle(tile, r, i);
+      if (mode === 'rolling') {
+        tile.classList.add('is-rolling');
+      } else {
+        handle.settle(r);
+      }
+      return handle;
     });
+  }
 
-    var total = M.totalOf(lastResults);
-    var pill = $('total-pill');
-    if (total !== null && M.state().settings.total) {
-      pill.innerHTML = '';
-      pill.appendChild(document.createTextNode('Total '));
-      var b = el('b', null, String(total));
-      pill.appendChild(b);
-      pill.hidden = false;
-    } else {
-      pill.hidden = true;
-    }
+  /* Lets the animation swap faces on a tile without rebuilding the stage. */
+  function makeTileHandle(tile, result, index) {
+    var die = M.getDie(result.dieId);
+    var handle = {
+      landed: false,
+      showRandomFace: function () {
+        if (!die || die.faces.length < 2) return;
+        setTileFace(tile, die, die.faces[M.randomInt(die.faces.length)]);
+      },
+      settle: function (final) {
+        handle.landed = true;
+        tile.classList.remove('is-rolling');
+        setTileFace(tile, final, final.face);
+        tile.classList.toggle('is-max', isTopFace(final));
+        tile.setAttribute('aria-label', final.name + ' rolled ' + final.face + '. Tap to reroll.');
+        if (!reducedMotion()) {
+          tile.classList.remove('is-landing');
+          void tile.offsetWidth;              // restart the landing bounce
+          tile.classList.add('is-landing');
+        }
+      },
+      index: index
+    };
+    return handle;
+  }
+
+  function setTileFace(tile, die, face) {
+    var old = tile.querySelector('.die-face');
+    var fresh = R.faceEl(die, face);
+    if (old) old.replaceWith(fresh); else tile.insertBefore(fresh, tile.firstChild);
   }
 
   /* ============================================================
@@ -165,6 +323,7 @@
     dice.forEach(function (die) {
       grid.appendChild(R.dieCard(die, M.trayCount(die.id), {
         onAdd: function (d) {
+          trayExpanded = true;
           M.setTrayCount(d.id, M.trayCount(d.id) + 1);
           renderLibrary();
           renderTray();
@@ -220,6 +379,7 @@
     $('editor').hidden = true;
     document.body.style.overflow = '';
     draft = null;
+    if (pendingWorker) applyUpdate(pendingWorker);
   }
 
   function renderColors() {
@@ -554,11 +714,17 @@
     });
 
     $('btn-roll').addEventListener('click', doRoll);
+    $('tray-summary').addEventListener('click', function () {
+      trayExpanded = true;
+      renderTray();
+    });
     $('btn-clear-tray').addEventListener('click', function () {
+      clearRollTimers();
       M.clearTray();
       lastResults = [];
+      trayExpanded = true;
       renderTray();
-      renderResults();
+      renderResults('settled');
       renderLibrary();
     });
 
@@ -650,7 +816,12 @@
       M.state().settings.haptics = this.checked; M.save(); buzz(12);
     });
     $('opt-total').addEventListener('change', function () {
-      M.state().settings.total = this.checked; M.save(); renderResults();
+      M.state().settings.total = this.checked; M.save(); showTotal();
+    });
+    $('btn-check-update').addEventListener('click', function () {
+      if (!swReg) { toast('Updates need the app opened over the web'); return; }
+      checkForUpdate(true);
+      toast('Checking for updates…');
     });
     $('btn-clear-history').addEventListener('click', function () {
       M.state().history = [];
@@ -666,9 +837,10 @@
       s.history = [];
       M.save();
       lastResults = [];
+      trayExpanded = true;
       closeSettings();
       renderTray();
-      renderResults();
+      renderResults('settled');
       renderLibrary();
       renderHistory();
       showView('dice');
@@ -698,6 +870,63 @@
   /* ============================================================
      Boot
      ============================================================ */
+  /* ============================================================
+     Updates — an installed copy should refresh itself
+     ============================================================ */
+  var swReg = null, pendingWorker = null, reloading = false, lastCheck = 0;
+
+  function setupServiceWorker() {
+    if (!('serviceWorker' in navigator) || location.protocol.indexOf('http') !== 0) return;
+
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then(function (reg) {
+        swReg = reg;
+        if (reg.waiting && navigator.serviceWorker.controller) applyUpdate(reg.waiting);
+        reg.addEventListener('updatefound', function () {
+          var incoming = reg.installing;
+          if (!incoming) return;
+          incoming.addEventListener('statechange', function () {
+            // A controller already exists, so this really is an update.
+            if (incoming.state === 'installed' && navigator.serviceWorker.controller) {
+              applyUpdate(incoming);
+            }
+          });
+        });
+      })
+      .catch(function () { /* offline cache is optional */ });
+
+    // On a first visit the worker claims this page; that is not an update,
+    // so only reload when we are swapping one controller for another.
+    var hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (reloading || !hadController) { hadController = true; return; }
+      reloading = true;
+      location.reload();
+    });
+
+    // Look for a new build whenever the app comes back to the foreground.
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) checkForUpdate();
+    });
+    window.addEventListener('focus', checkForUpdate);
+  }
+
+  function applyUpdate(worker) {
+    // Never reload out from under someone editing a die.
+    if (!$('editor').hidden) { pendingWorker = worker; return; }
+    pendingWorker = null;
+    toast('Updating to the latest version…');
+    worker.postMessage({ type: 'SKIP_WAITING' });
+  }
+
+  function checkForUpdate(force) {
+    if (!swReg) return;
+    var now = Date.now();
+    if (!force && now - lastCheck < 30000) return;
+    lastCheck = now;
+    swReg.update().catch(function () {});
+  }
+
   function init() {
     M.load();
     bind();
@@ -705,10 +934,8 @@
     renderLibrary();
     showView(M.totalDiceInTray() ? 'roll' : 'dice');
     if (M.state().settings.shake) enableShake();
-
-    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
-      navigator.serviceWorker.register('sw.js').catch(function () { /* offline cache is optional */ });
-    }
+    $('app-version').textContent = 'Dice Lab v' + APP_VERSION;
+    setupServiceWorker();
   }
 
   document.addEventListener('DOMContentLoaded', init);

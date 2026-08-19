@@ -37,9 +37,14 @@
           <button class="btn btn-primary" data-goto="dice">Choose dice</button>
         </div>
         <div class="tray-list" id="tray-list" hidden></div>
+        <button class="tray-summary" id="tray-summary" hidden>
+          <span class="tray-summary-faces" id="tray-summary-faces"></span>
+          <span class="tray-summary-text" id="tray-summary-text"></span>
+          <span class="tray-summary-edit">Edit</span>
+        </button>
       </div>
 
-      <div class="results" id="results" aria-live="polite"></div>
+      <div class="stage" id="results" aria-live="polite"></div>
 
       <div class="roll-dock" id="roll-dock" hidden>
         <div class="total-pill" id="total-pill" hidden></div>
@@ -211,9 +216,11 @@
         <input type="checkbox" id="opt-total" />
         <span class="switch" aria-hidden="true"></span>
       </label>
+      <button class="btn btn-ghost" id="btn-check-update">Check for updates</button>
       <button class="btn btn-ghost" id="btn-clear-history">Clear roll history</button>
       <button class="btn btn-danger" id="btn-reset">Reset app &amp; restore starter dice</button>
-      <p class="fineprint">Everything is stored on this device only.</p>
+      <p class="fineprint">Everything is stored on this device only.<br />
+        <span id="app-version">Dice Lab</span></p>
     </div>
   </div>
 </div>

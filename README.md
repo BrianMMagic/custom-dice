@@ -16,6 +16,13 @@ python3 -m http.server 8000    # then visit http://localhost:8000
 Serving over http(s) also enables the service worker, so the app works offline and
 can be installed to a phone's home screen ("Add to Home Screen").
 
+**Updates.** HTML, CSS and JS are fetched network-first, so a new deploy is picked up
+as soon as there's a connection; the cache is only the offline fallback. When a new
+build installs, the app activates it and reloads itself — except while the die editor
+is open, where it waits so an in-progress die is never lost. It also re-checks for a
+new build whenever the app returns to the foreground, and **Settings → Check for
+updates** forces a check.
+
 ## What it does
 
 **Three screens, one bottom tab bar**
@@ -50,8 +57,12 @@ ink on pale colours so they stay readable at any size.
 
 **Rolling**
 
+- The dice are the hero: on a roll the tray collapses to a one-line summary
+  (tap **Edit** to open it again) and the dice take over the screen, sized to
+  how many are in play — one die fills most of the screen, a fistful tiles neatly
+- Dice tumble through random faces and land one after another, with a bounce
 - Big thumb-reachable Roll button; the tray dock stays pinned above the tab bar
-- Tap any landed die to reroll just that one
+- Tap any landed die to reroll just that one (it spins on its own)
 - Totals are added up automatically whenever faces are numbers (toggleable)
 - A die that lands on its own highest number is outlined
 - Optional **shake to roll** (asks for motion permission on iOS) and vibration feedback

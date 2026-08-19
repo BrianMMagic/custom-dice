@@ -51,7 +51,15 @@ body{
 }
 
 button,input{font:inherit;color:inherit}
-button{background:none;border:0;cursor:pointer}
+button{
+  background:none;border:0;cursor:pointer;
+  /* no double-tap-to-zoom or 300ms delay on taps */
+  touch-action:manipulation;
+  -webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none;
+}
+/* Applies down the whole tree: double-tap zoom off, pinch zoom still fine. */
+.app,.sheet,.toast{touch-action:manipulation}
 h1,h2,h3,p{margin:0}
 svg{width:24px;height:24px;fill:currentColor}
 
@@ -94,6 +102,10 @@ svg{width:24px;height:24px;fill:currentColor}
 .view{padding:16px 16px 132px;animation:fade .22s ease}
 .view[hidden]{display:none}
 @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* the roll view fills the screen so the dice sit centred in the free space */
+.view-roll{display:flex;flex-direction:column;min-height:calc(100dvh - 62px)}
+.view-roll .stage{flex:1 1 auto}
 
 .view-head{margin-bottom:14px}
 .view-head h2{font-size:24px;font-weight:750;letter-spacing:-.02em}
@@ -144,6 +156,28 @@ svg{width:24px;height:24px;fill:currentColor}
 .tray-empty-sub{color:var(--muted);font-size:14px;margin:4px 0 18px}
 
 .tray-list{display:flex;flex-direction:column;gap:10px}
+
+.tray-summary{
+  width:100%;display:flex;align-items:center;gap:10px;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:999px;padding:7px 8px 7px 10px;min-height:52px;
+}
+.tray-summary[hidden]{display:none}
+.tray-summary-faces{display:flex;flex:0 0 auto}
+.tray-summary-faces .die-face{
+  width:30px;height:30px;font-size:12px;border-radius:9px;
+  margin-right:-9px;box-shadow:0 0 0 2px var(--surface);
+}
+.tray-summary-text{
+  flex:1;min-width:0;text-align:left;padding-left:14px;
+  font-size:13.5px;font-weight:600;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.tray-summary-edit{
+  flex:0 0 auto;padding:0 14px;min-height:36px;display:grid;place-items:center;
+  border-radius:999px;background:var(--surface-2);color:var(--accent);
+  font-size:13.5px;font-weight:700;
+}
 .tray-item{
   display:flex;align-items:center;gap:12px;
   background:var(--surface);border:1px solid var(--line);
@@ -158,16 +192,35 @@ svg{width:24px;height:24px;fill:currentColor}
 .qty button:active{background:var(--surface)}
 .qty .qty-n{min-width:26px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
 
-/* results */
-.results{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:12px;margin-top:18px}
-.results:empty{display:none}
+/* ---------- the roll stage: dice are the hero here ---------- */
+.stage{
+  --tile:110px;
+  display:flex;flex-wrap:wrap;align-content:center;justify-content:center;
+  gap:18px 14px;min-height:44dvh;margin-top:16px;padding:8px 0 6px;
+}
+.stage:empty{display:none}
 .result{
-  aspect-ratio:1;border-radius:20px;display:grid;place-items:center;
+  width:var(--tile);height:var(--tile);
+  border-radius:22%;display:grid;place-items:center;
   padding:0;border:0;background:none;-webkit-appearance:none;font:inherit;
   position:relative;box-shadow:var(--shadow);
   will-change:transform;
 }
 .result.anim{animation:tumble .55s cubic-bezier(.2,.9,.25,1) both}
+.result.is-rolling{animation:shake .4s ease-in-out infinite}
+.result.is-landing{animation:land .42s cubic-bezier(.2,1.5,.4,1) both}
+@keyframes shake{
+  0%{transform:translateY(0) rotate(-8deg) scale(.94)}
+  25%{transform:translateY(-12px) rotate(7deg) scale(1.03)}
+  50%{transform:translateY(3px) rotate(-6deg) scale(.96)}
+  75%{transform:translateY(-7px) rotate(9deg) scale(1.02)}
+  100%{transform:translateY(0) rotate(-8deg) scale(.94)}
+}
+@keyframes land{
+  0%{transform:rotate(7deg) scale(1.18)}
+  60%{transform:rotate(-2deg) scale(.95)}
+  100%{transform:none}
+}
 .result::after{
   content:"";position:absolute;inset:0;border-radius:inherit;
   background:linear-gradient(160deg,rgba(255,255,255,.28),rgba(255,255,255,0) 45%);
@@ -180,15 +233,16 @@ svg{width:24px;height:24px;fill:currentColor}
   100%{transform:none;opacity:1}
 }
 @media (prefers-reduced-motion:reduce){
-  .result.anim{animation:none}
+  .result.anim,.result.is-rolling,.result.is-landing{animation:none}
   .view{animation:none}
+  .total-pill{animation:none}
 }
 .result-name{
-  position:absolute;bottom:-19px;left:0;right:0;text-align:center;
-  font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  position:absolute;bottom:-18px;left:0;right:0;text-align:center;
+  font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.results{padding-bottom:8px}
-.results .result{margin-bottom:14px}
+.stage .result{margin-bottom:16px;position:relative}
+.result .die-face{width:100%;height:100%;border-radius:22%;font-size:calc(var(--tile) * .46)}
 
 /* roll dock */
 .roll-dock{
@@ -197,6 +251,7 @@ svg{width:24px;height:24px;fill:currentColor}
   background:linear-gradient(to top,var(--bg) 62%,transparent);
 }
 .total-pill{
+  animation:pop .32s cubic-bezier(.2,1.4,.4,1) both;
   margin:0 auto 10px;width:max-content;padding:7px 18px;border-radius:999px;
   background:var(--surface);border:1px solid var(--line);
   font-weight:700;font-variant-numeric:tabular-nums;box-shadow:var(--shadow);
@@ -258,7 +313,6 @@ svg{width:24px;height:24px;fill:currentColor}
 .die-chip{width:44px;height:44px;font-size:17px}
 .die-preview{width:92px;height:92px;font-size:34px;flex:0 0 auto}
 .die-card .die-face{width:74px;height:74px;font-size:28px}
-.result .die-face{width:100%;height:100%;font-size:34px;border-radius:20px}
 
 /* pips */
 .pips{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);width:70%;height:70%;padding:2%}
@@ -280,6 +334,7 @@ svg{width:24px;height:24px;fill:currentColor}
   box-shadow:0 -12px 40px rgba(0,0,0,.4);
 }
 .sheet-panel-short{max-height:84dvh}
+@keyframes pop{from{transform:scale(.7);opacity:0}to{transform:none;opacity:1}}
 @keyframes slideup{from{transform:translateY(6%)}to{transform:none}}
 .sheet-head{
   display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;
