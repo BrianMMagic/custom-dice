@@ -168,16 +168,21 @@
   }
 
   /* ---------- result tile ---------- */
-  function resultTile(result, index, isBest, onReroll, animate) {
-    var wrap = el('button', 'result' + (isBest ? ' is-max' : '') + (animate ? ' anim' : ''));
-    wrap.type = 'button';
-    if (animate) wrap.style.animationDelay = Math.min(index * 45, 360) + 'ms';
-    wrap.title = 'Tap to reroll this die';
-    wrap.setAttribute('aria-label', result.name + ' rolled ' + result.face + '. Tap to reroll.');
-    wrap.appendChild(faceEl(result, result.face));
-    wrap.appendChild(el('div', 'result-name', result.name));
-    if (onReroll) wrap.addEventListener('click', function () { onReroll(index); });
-    return wrap;
+  /* A slot holds the die and, optionally, its name. Only the die animates. */
+  function resultTile(result, index, isBest, onReroll, animate, showName) {
+    var slot = el('div', 'result-slot');
+
+    var die = el('button', 'result' + (isBest ? ' is-max' : '') + (animate ? ' anim' : ''));
+    die.type = 'button';
+    if (animate) die.style.animationDelay = Math.min(index * 45, 360) + 'ms';
+    die.title = 'Tap to reroll this die';
+    die.setAttribute('aria-label', result.name + ' rolled ' + result.face + '. Tap to reroll.');
+    die.appendChild(faceEl(result, result.face));
+    if (onReroll) die.addEventListener('click', function () { onReroll(index); });
+    slot.appendChild(die);
+
+    if (showName) slot.appendChild(el('div', 'result-name', result.name));
+    return slot;
   }
 
   /* ---------- history ---------- */

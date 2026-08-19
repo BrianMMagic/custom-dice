@@ -9,7 +9,7 @@
   var el = R.el;
   var $ = function (id) { return document.getElementById(id); };
 
-  var APP_VERSION = '1.4.0';
+  var APP_VERSION = '1.5.0';
 
   var lastResults = [];
   var draft = null;          // die being edited in the sheet
@@ -90,6 +90,7 @@
     $('btn-roll').disabled = count === 0;
     $('shake-hint').hidden = !(s.settings.shake && count > 0);
     updateTabBadge(count);
+    syncStageInsets();
   }
 
   /* One-line stand-in for the tray so the dice own the screen. */
@@ -107,6 +108,15 @@
     });
     if (M.state().tray.length > 4) names.push('+' + (M.state().tray.length - 4) + ' more');
     text.textContent = names.join(', ');
+  }
+
+  /* The dock and tab bar are fixed, so measure them and keep the stage clear
+     of both — otherwise the dice centre themselves underneath the buttons. */
+  function syncStageInsets() {
+    var dock = $('roll-dock');
+    var tabbar = document.querySelector('.tabbar');
+    var space = (dock.hidden ? 0 : dock.offsetHeight) + tabbar.offsetHeight + 10;
+    document.documentElement.style.setProperty('--dock-space', space + 'px');
   }
 
   function updateTabBadge(count) {
@@ -184,6 +194,7 @@
     } else {
       pill.hidden = true;
     }
+    syncStageInsets();
   }
 
   /* Dice grow when there are only a few of them. */
@@ -230,7 +241,8 @@
       M.save();
     }
 
-    var tile = $('results').children[index];
+    var slot = $('results').children[index];
+    var tile = slot && slot.querySelector('.result');
     if (!tile) { renderResults('settled'); showTotal(); return; }
     var handle = makeTileHandle(tile, result, index);
 
@@ -264,9 +276,12 @@
 
     box.style.setProperty('--tile', tileSize(lastResults.length));
 
+    var showNames = !!M.state().settings.labels;
+
     return lastResults.map(function (r, i) {
-      var tile = R.resultTile(r, i, false, rerollOne, mode === 'settled');
-      box.appendChild(tile);
+      var slot = R.resultTile(r, i, false, rerollOne, mode === 'settled', showNames);
+      box.appendChild(slot);
+      var tile = slot.querySelector('.result');
       var handle = makeTileHandle(tile, r, i);
       if (mode === 'rolling') {
         tile.classList.add('is-rolling');
@@ -659,6 +674,7 @@
     $('opt-haptics').checked = !!s.haptics;
     $('opt-total').checked = !!s.total;
     $('opt-highlight').checked = !!s.highlight;
+    $('opt-labels').checked = !!s.labels;
     $('settings').hidden = false;
     document.body.style.overflow = 'hidden';
   }
@@ -819,6 +835,11 @@
     $('opt-total').addEventListener('change', function () {
       M.state().settings.total = this.checked; M.save(); showTotal();
     });
+    $('opt-labels').addEventListener('change', function () {
+      M.state().settings.labels = this.checked;
+      M.save();
+      if (lastResults.length) { renderResults('settled'); showTotal(); }
+    });
     $('opt-highlight').addEventListener('change', function () {
       M.state().settings.highlight = this.checked;
       M.save();
@@ -968,6 +989,9 @@
     if (M.state().settings.shake) enableShake();
     $('app-version').textContent = 'Dice Lab v' + APP_VERSION;
     blockDoubleTapZoom();
+    syncStageInsets();
+    window.addEventListener('resize', syncStageInsets);
+    window.addEventListener('orientationchange', function () { setTimeout(syncStageInsets, 250); });
     setupServiceWorker();
   }
 

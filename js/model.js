@@ -142,7 +142,7 @@
     dice: [],
     tray: [],          // [{dieId, count}]
     history: [],       // [{at, results, total}]
-    settings: { shake: false, haptics: true, total: true, highlight: true }
+    settings: { shake: false, haptics: true, total: true, highlight: true, labels: true }
   };
 
   var state = null;

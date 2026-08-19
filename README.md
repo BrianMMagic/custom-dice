@@ -66,6 +66,8 @@ ink on pale colours so they stay readable at any size.
 - Totals are added up automatically whenever faces are numbers (toggleable)
 - A die that lands on its own highest number is outlined in green — a "top roll"
   marker, switchable off with **Settings → Mark top rolls**
+- Die names under each result can be switched off (**Settings → Show die names**);
+  when they are on they stay put while the dice tumble
 - Optional **shake to roll** (asks for motion permission on iOS) and vibration feedback
 - Press <kbd>Space</kbd> to roll on a desktop keyboard
 
