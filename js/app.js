@@ -9,7 +9,7 @@
   var el = R.el;
   var $ = function (id) { return document.getElementById(id); };
 
-  var APP_VERSION = '1.3.0';
+  var APP_VERSION = '1.4.0';
 
   var lastResults = [];
   var draft = null;          // die being edited in the sheet
@@ -290,7 +290,7 @@
         handle.landed = true;
         tile.classList.remove('is-rolling');
         setTileFace(tile, final, final.face);
-        tile.classList.toggle('is-max', isTopFace(final));
+        tile.classList.toggle('is-max', M.state().settings.highlight && isTopFace(final));
         tile.setAttribute('aria-label', final.name + ' rolled ' + final.face + '. Tap to reroll.');
         if (!reducedMotion()) {
           tile.classList.remove('is-landing');
@@ -658,6 +658,7 @@
     $('opt-shake').checked = !!s.shake;
     $('opt-haptics').checked = !!s.haptics;
     $('opt-total').checked = !!s.total;
+    $('opt-highlight').checked = !!s.highlight;
     $('settings').hidden = false;
     document.body.style.overflow = 'hidden';
   }
@@ -818,6 +819,11 @@
     $('opt-total').addEventListener('change', function () {
       M.state().settings.total = this.checked; M.save(); showTotal();
     });
+    $('opt-highlight').addEventListener('change', function () {
+      M.state().settings.highlight = this.checked;
+      M.save();
+      if (lastResults.length) { renderResults('settled'); showTotal(); }
+    });
     $('btn-check-update').addEventListener('click', function () {
       if (!swReg) { toast('Updates need the app opened over the web'); return; }
       checkForUpdate(true);
@@ -927,6 +933,32 @@
     swReg.update().catch(function () {});
   }
 
+  /* iOS still zooms on a quick double tap even with touch-action set, so
+     swallow the second tap and fire the click ourselves instead. */
+  function blockDoubleTapZoom() {
+    var lastTap = 0;
+    document.addEventListener('touchend', function (e) {
+      var target = e.target;
+      // leave text fields, sliders and the colour picker to the browser
+      if (target.closest && target.closest('input, textarea, select, .slider, .swatch-custom')) {
+        lastTap = 0;
+        return;
+      }
+      var now = Date.now();
+      if (now - lastTap <= 350) {
+        e.preventDefault();
+        var btn = target.closest && target.closest('button');
+        if (btn) btn.click();      // keep rapid repeat taps working
+      }
+      lastTap = now;
+    }, { passive: false });
+
+    // iOS pinch/zoom gestures inside the app shell
+    document.addEventListener('gesturestart', function (e) {
+      if (e.target.closest && e.target.closest('.app')) e.preventDefault();
+    });
+  }
+
   function init() {
     M.load();
     bind();
@@ -935,6 +967,7 @@
     showView(M.totalDiceInTray() ? 'roll' : 'dice');
     if (M.state().settings.shake) enableShake();
     $('app-version').textContent = 'Dice Lab v' + APP_VERSION;
+    blockDoubleTapZoom();
     setupServiceWorker();
   }
 

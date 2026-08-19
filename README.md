@@ -64,7 +64,8 @@ ink on pale colours so they stay readable at any size.
 - Big thumb-reachable Roll button; the tray dock stays pinned above the tab bar
 - Tap any landed die to reroll just that one (it spins on its own)
 - Totals are added up automatically whenever faces are numbers (toggleable)
-- A die that lands on its own highest number is outlined
+- A die that lands on its own highest number is outlined in green — a "top roll"
+  marker, switchable off with **Settings → Mark top rolls**
 - Optional **shake to roll** (asks for motion permission on iOS) and vibration feedback
 - Press <kbd>Space</kbd> to roll on a desktop keyboard
 
